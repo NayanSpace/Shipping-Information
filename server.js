@@ -47,7 +47,22 @@ async function scrapeUPSTracking(trackingNumber) {
             '--disable-renderer-backgrounding',
             '--disable-features=TranslateUI',
             '--disable-ipc-flooding-protection',
-            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            '--disable-blink-features=AutomationControlled',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-images',
+            '--disable-javascript',
+            '--disable-default-apps',
+            '--disable-sync',
+            '--disable-translate',
+            '--hide-scrollbars',
+            '--mute-audio',
+            '--no-first-run',
+            '--safebrowsing-disable-auto-update',
+            '--ignore-certificate-errors',
+            '--ignore-ssl-errors',
+            '--ignore-certificate-errors-spki-list',
+            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
     });
     
@@ -56,6 +71,49 @@ async function scrapeUPSTracking(trackingNumber) {
     try {
         // Set viewport and user agent
         await page.setViewport({ width: 1920, height: 1080 });
+        
+        // Remove webdriver property to avoid detection
+        await page.evaluateOnNewDocument(() => {
+            delete navigator.__proto__.webdriver;
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+        });
+
+        // Add additional stealth measures
+        await page.evaluateOnNewDocument(() => {
+            // Override the plugins property
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+
+            // Override the languages property
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en'],
+            });
+
+            // Override the permissions property
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+        });
+
+        // Set additional headers to look more like a real browser
+        await page.setExtraHTTPHeaders({
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1'
+        });
         
         // Handle cookie consent if it appears
         page.on('dialog', async dialog => {
@@ -67,6 +125,9 @@ async function scrapeUPSTracking(trackingNumber) {
         console.log('🌐 Navigating to UPS tracking page...');
         const url = `https://www.ups.com/track?loc=en_US&tracknum=${trackingNumber}`;
         console.log('URL:', url);
+        
+        // Add a random delay to simulate human behavior
+        await page.waitForTimeout(Math.random() * 2000 + 1000);
         
         await page.goto(url, { 
             waitUntil: 'networkidle2',
@@ -160,6 +221,16 @@ async function scrapeUPSTracking(trackingNumber) {
         const trackingData = await page.evaluate(() => {
             console.log('🔍 Starting tracking data extraction...');
             
+            // First, check if the package is delivered by looking for the delivered checkmark at the top
+            const deliveredCheckmark = document.querySelector('#st_App_DelvdLabel i.ups-icon-checkcircle-solid, .ups-icon-checkcircle-solid, [id*="DelvdLabel"] i');
+            const hasDeliveredCheckmark = deliveredCheckmark !== null;
+            
+            // Also check for "Delivered On" text at the top
+            const hasDeliveredOnText = document.body.innerText.includes('Delivered On');
+            
+            console.log('Delivered checkmark found:', hasDeliveredCheckmark);
+            console.log('Delivered On text found:', hasDeliveredOnText);
+            
             // First, try to find the milestone progress bar
             const milestoneBar = document.querySelector('milestone-progress-bar#stApp_shpmtProgress');
             console.log('Milestone bar found:', !!milestoneBar);
@@ -207,6 +278,7 @@ async function scrapeUPSTracking(trackingNumber) {
             const progressSteps = [];
             let currentStatus = 'Status not found';
             let lastCompletedStep = null;
+            let deliveredStepFound = false;
 
             progressRows.forEach((row, index) => {
                 try {
@@ -219,20 +291,38 @@ async function scrapeUPSTracking(trackingNumber) {
                         const hasCheckmark = row.querySelector('.ups-progress_past_row') !== null || 
                                            row.classList.contains('ups-progress_past_row') ||
                                            row.innerHTML.includes('check') ||
-                                           row.innerHTML.includes('✓');
+                                           row.innerHTML.includes('✓') ||
+                                           row.querySelector('.ups-icon-checkcircle-solid') !== null;
+
+                        // Check if this is the delivered step
+                        const isDeliveredStep = rowText.toLowerCase().includes('delivered') || 
+                                              rowText.toLowerCase().includes('delivery');
+
+                        // Special logic: If package is delivered and this is the last step (delivered step), 
+                        // force it to be completed even if it shows pending
+                        let forceCompleted = false;
+                        if ((hasDeliveredCheckmark || hasDeliveredOnText) && isDeliveredStep && index === progressRows.length - 1) {
+                            forceCompleted = true;
+                            console.log('Forcing delivered step to be completed');
+                        }
 
                         const step = {
                             stepNumber: index + 1,
                             text: rowText,
-                            completed: hasCheckmark,
+                            completed: hasCheckmark || forceCompleted,
+                            isDelivered: isDeliveredStep,
+                            forceCompleted: forceCompleted,
                             timestamp: new Date().toISOString()
                         };
 
                         progressSteps.push(step);
 
                         // Update current status to the last completed step
-                        if (hasCheckmark) {
+                        if (hasCheckmark || forceCompleted) {
                             lastCompletedStep = rowText;
+                            if (isDeliveredStep) {
+                                deliveredStepFound = true;
+                            }
                         }
                     }
                 } catch (error) {
@@ -240,8 +330,16 @@ async function scrapeUPSTracking(trackingNumber) {
                 }
             });
 
-            // Set current status to the last completed step
-            if (lastCompletedStep) {
+            // Determine the current status
+            if (hasDeliveredCheckmark || hasDeliveredOnText || deliveredStepFound) {
+                // Package is delivered - look for the delivered step in progress
+                const deliveredStep = progressSteps.find(step => step.isDelivered);
+                if (deliveredStep) {
+                    currentStatus = deliveredStep.text;
+                } else {
+                    currentStatus = 'Delivered';
+                }
+            } else if (lastCompletedStep) {
                 currentStatus = lastCompletedStep;
             } else if (progressSteps.length > 0) {
                 // If no completed steps, use the first step as current status
@@ -266,6 +364,13 @@ async function scrapeUPSTracking(trackingNumber) {
                 }
             }
 
+            // If we found delivered indicators but status doesn't reflect it, override
+            if ((hasDeliveredCheckmark || hasDeliveredOnText || deliveredStepFound) && 
+                !deliveryStatus.toLowerCase().includes('delivered')) {
+                deliveryStatus = 'Delivered';
+                currentStatus = 'Delivered';
+            }
+
             // Get tracking number from URL or page
             const trackingNumber = window.location.search.match(/tracknum=([^&]+)/)?.[1] || '';
 
@@ -276,7 +381,8 @@ async function scrapeUPSTracking(trackingNumber) {
                 trackingNumber: trackingNumber,
                 timestamp: new Date().toISOString(),
                 pageTitle: document.title,
-                totalSteps: progressSteps.length
+                totalSteps: progressSteps.length,
+                isDelivered: hasDeliveredCheckmark || hasDeliveredOnText || deliveredStepFound
             };
         });
 

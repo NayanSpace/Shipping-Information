@@ -15,6 +15,7 @@ async function promptTrackingNumber() {
 }
 
 async function scrapeUPSTracking(trackingNumber) {
+  // Use a different approach - try to access the mobile version first
   const browser = await puppeteer.launch({ 
     headless: false,
     args: [
@@ -31,8 +32,6 @@ async function scrapeUPSTracking(trackingNumber) {
       '--disable-blink-features=AutomationControlled',
       '--disable-extensions',
       '--disable-plugins',
-      '--disable-images',
-      '--disable-javascript',
       '--disable-default-apps',
       '--disable-sync',
       '--disable-translate',
@@ -43,14 +42,15 @@ async function scrapeUPSTracking(trackingNumber) {
       '--ignore-certificate-errors',
       '--ignore-ssl-errors',
       '--ignore-certificate-errors-spki-list',
-      '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      '--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1'
     ]
   });
+  
   const page = await browser.newPage();
   
   try {
-    // Set viewport and user agent
-    await page.setViewport({ width: 1920, height: 1080 });
+    // Set mobile viewport
+    await page.setViewport({ width: 375, height: 667 });
     
     // Remove webdriver property to avoid detection
     await page.evaluateOnNewDocument(() => {
@@ -83,7 +83,7 @@ async function scrapeUPSTracking(trackingNumber) {
 
     // Set additional headers to look more like a real browser
     await page.setExtraHTTPHeaders({
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
       'Accept-Encoding': 'gzip, deflate, br',
       'Cache-Control': 'no-cache',
@@ -95,15 +95,17 @@ async function scrapeUPSTracking(trackingNumber) {
       'Upgrade-Insecure-Requests': '1'
     });
 
-    const url = `https://www.ups.com/track?loc=en_US&tracknum=${trackingNumber}`;
+    // Try the mobile version first
+    const mobileUrl = `https://www.ups.com/track?loc=en_US&tracknum=${trackingNumber}`;
     
     // Add a random delay to simulate human behavior
-    await page.waitForTimeout(Math.random() * 2000 + 1000);
+    await page.waitForTimeout(Math.random() * 3000 + 2000);
     
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    console.log('Trying mobile version...');
+    await page.goto(mobileUrl, { waitUntil: 'networkidle2', timeout: 30000 });
     
     // Wait for content to load
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(5000);
     
     // Try to handle cookie consent banner if present
     try {
@@ -125,7 +127,9 @@ async function scrapeUPSTracking(trackingNumber) {
           '.ups-tracking-summary',
           '[id*="progress"]',
           '[class*="tracking"]',
-          '[class*="ups-progress"]'
+          '[class*="ups-progress"]',
+          '.tracking-details',
+          '.shipment-progress'
         ];
         
         return trackingSelectors.some(selector => {
@@ -149,16 +153,16 @@ async function scrapeUPSTracking(trackingNumber) {
       console.log('Delivered checkmark found:', hasDeliveredCheckmark);
       console.log('Delivered On text found:', hasDeliveredOnText);
       
-      // Try to find the milestone progress bar
-      const milestoneBar = document.querySelector('milestone-progress-bar#stApp_shpmtProgress');
+      // Try multiple approaches to find tracking information
       
+      // Approach 1: Look for milestone progress bar
+      const milestoneBar = document.querySelector('milestone-progress-bar#stApp_shpmtProgress');
       if (milestoneBar) {
         const tbody = milestoneBar.querySelector('tbody');
         if (tbody) {
           const progressRows = tbody.querySelectorAll('tr[id^="stApp_ShpmtProg_LVP_progress_row_"]');
           const details = Array.from(progressRows).map(row => row.innerText.trim()).filter(text => text);
           
-          // Find current status (last completed step)
           let status = 'Status not found';
           let deliveredStepFound = false;
           
@@ -209,10 +213,47 @@ async function scrapeUPSTracking(trackingNumber) {
         }
       }
       
-      // Fallback to old selectors
-      const status = document.querySelector('.ups-tracking-summary-status')?.innerText || 'Status not found';
-      const details = Array.from(document.querySelectorAll('.ups-tracking-progress-container .ups-progress-section'))
-        .map(section => section.innerText.trim());
+      // Approach 2: Look for any tracking-related content
+      const allText = document.body.innerText;
+      const lines = allText.split('\n').filter(line => line.trim().length > 0);
+      
+      // Look for lines that might contain tracking information
+      const trackingLines = lines.filter(line => 
+        line.toLowerCase().includes('delivered') ||
+        line.toLowerCase().includes('in transit') ||
+        line.toLowerCase().includes('out for delivery') ||
+        line.toLowerCase().includes('pending') ||
+        line.toLowerCase().includes('shipped') ||
+        line.toLowerCase().includes('processing') ||
+        line.toLowerCase().includes('arrived') ||
+        line.toLowerCase().includes('departed')
+      );
+      
+      if (trackingLines.length > 0) {
+        let status = trackingLines[0];
+        
+        // If we found delivered indicators, prioritize delivered status
+        if ((hasDeliveredCheckmark || hasDeliveredOnText) && 
+            !status.toLowerCase().includes('delivered')) {
+          status = 'Delivered';
+        }
+        
+        return {
+          status: status,
+          details: trackingLines.slice(0, 5) // Take first 5 relevant lines
+        };
+      }
+      
+      // Approach 3: Fallback to old selectors
+      const status = document.querySelector('.ups-tracking-summary-status')?.innerText || 
+                    document.querySelector('.tracking-status')?.innerText ||
+                    document.querySelector('.status-text')?.innerText ||
+                    'Status not found';
+                    
+      const details = Array.from(document.querySelectorAll('.ups-tracking-progress-container .ups-progress-section, .tracking-details, .shipment-progress'))
+        .map(section => section.innerText.trim())
+        .filter(text => text);
+        
       return { status, details };
     });
     
@@ -221,7 +262,7 @@ async function scrapeUPSTracking(trackingNumber) {
     console.error('Scraping error:', err);
     return { error: 'Could not retrieve tracking information. Please check the tracking number and try again.' };
   } finally {
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
     await browser.close();
   }
 }
@@ -236,4 +277,4 @@ async function scrapeUPSTracking(trackingNumber) {
     console.log('Details:');
     info.details.forEach((d, i) => console.log(`${i + 1}. ${d}`));
   }
-})(); 
+})();
