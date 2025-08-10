@@ -1,0 +1,22 @@
+{
+  "name": "shipping-tracker",
+  "version": "1.0.0",
+  "description": "A web application to track shipments from different carriers",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "puppeteer": "^21.5.2"
+  },
+  "keywords": [
+    "shipping",
+    "tracking",
+    "ups"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

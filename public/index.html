@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shipping Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚚 Shipping Tracker</h1>
+            <p>Track your shipments from multiple carriers</p>
+        </header>
+
+        <main>
+            <div class="tracking-form">
+                <h2>Track Your Shipment</h2>
+                <form id="trackingForm">
+                    <div class="form-group">
+                        <label for="trackingNumber">Tracking Number:</label>
+                        <input 
+                            type="text" 
+                            id="trackingNumber" 
+                            name="trackingNumber" 
+                            placeholder="Enter UPS tracking number..."
+                            required
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="carrier">Carrier:</label>
+                        <select id="carrier" name="carrier">
+                            <option value="ups">UPS</option>
+                            <option value="fedex" disabled>FedEx (Coming Soon)</option>
+                            <option value="usps" disabled>USPS (Coming Soon)</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="trackButton">
+                        <span class="button-text">Track Shipment</span>
+                        <span class="loading-spinner" style="display: none;">⏳</span>
+                    </button>
+                </form>
+            </div>
+
+            <div class="results" id="results" style="display: none;">
+                <h3>Tracking Results</h3>
+                <div id="trackingInfo"></div>
+            </div>
+
+            <div class="shipment-history">
+                <h3>Recent Shipments</h3>
+                <div id="shipmentList">
+                    <p class="no-shipments">No shipments tracked yet. Enter a tracking number above to get started!</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
