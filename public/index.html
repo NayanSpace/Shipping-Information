@@ -23,18 +23,31 @@
                             type="text" 
                             id="trackingNumber" 
                             name="trackingNumber" 
-                            placeholder="Enter UPS tracking number..."
+                            placeholder="Enter tracking number..."
                             required
                         >
                     </div>
+
+                    <div class="form-group">
+                        <label for="customerLabel">Optional entered Customer #/order#:</label>
+                        <input 
+                            type="text" 
+                            id="customerLabel" 
+                            name="customerLabel" 
+                            placeholder="e.g., John Doe #12345 (optional)"
+                        >
+                    </div>
+
                     <div class="form-group">
                         <label for="carrier">Carrier:</label>
                         <select id="carrier" name="carrier">
                             <option value="ups">UPS</option>
                             <option value="fedex" disabled>FedEx (Coming Soon)</option>
+                            <option value="polaris" disabled>Polaris (Coming Soon)</option>
                             <option value="usps" disabled>USPS (Coming Soon)</option>
                         </select>
                     </div>
+
                     <button type="submit" id="trackButton">
                         <span class="button-text">Track Shipment</span>
                         <span class="loading-spinner" style="display: none;">⏳</span>
@@ -49,6 +62,15 @@
 
             <div class="shipment-history">
                 <h3>Recent Shipments</h3>
+
+                <div class="tabs" id="carrierTabs">
+                    <button type="button" class="tab active" data-carrier="all">All</button>
+                    <button type="button" class="tab" data-carrier="ups">UPS</button>
+                    <button type="button" class="tab" data-carrier="fedex">FedEx</button>
+                    <button type="button" class="tab" data-carrier="polaris">Polaris</button>
+                    <button type="button" class="tab" data-carrier="usps">USPS</button>
+                </div>
+
                 <div id="shipmentList">
                     <p class="no-shipments">No shipments tracked yet. Enter a tracking number above to get started!</p>
                 </div>
@@ -58,4 +80,4 @@
 
     <script src="script.js"></script>
 </body>
-</html> 
+</html>

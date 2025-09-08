@@ -1,302 +1,146 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
+/* Base layout */
+* { box-sizing: border-box; }
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    color: #333;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  color: #1f2937;
+  background: #f8fafc;
 }
-
 .container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.25rem;
 }
 
 header {
-    text-align: center;
-    margin-bottom: 40px;
-    color: white;
+  text-align: center;
+  margin-bottom: 1rem;
 }
+header h1 { margin: .25rem 0; }
+header p { color: #4b5563; }
 
-header h1 {
-    font-size: 2.5rem;
-    margin-bottom: 10px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-}
-
-header p {
-    font-size: 1.1rem;
-    opacity: 0.9;
-}
-
-main {
-    display: grid;
-    gap: 30px;
-    grid-template-columns: 1fr 1fr;
-}
-
-@media (max-width: 768px) {
-    main {
-        grid-template-columns: 1fr;
-    }
-}
-
+/* Card blocks */
 .tracking-form, .results, .shipment-history {
-    background: white;
-    border-radius: 15px;
-    padding: 30px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
 
-.tracking-form h2, .results h3, .shipment-history h3 {
-    margin-bottom: 20px;
-    color: #333;
-    font-size: 1.5rem;
-}
-
+/* Form */
 .form-group {
-    margin-bottom: 20px;
+  margin-bottom: .85rem;
+}
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: .35rem;
+}
+input[type="text"], select {
+  width: 100%;
+  padding: .6rem .7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  outline: none;
+}
+input[type="text"]:focus, select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.15);
 }
 
-.form-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: #555;
+#trackButton {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .65rem 1rem;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: white;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+}
+#trackButton[disabled] {
+  opacity: .7;
+  cursor: not-allowed;
 }
 
-.form-group input, .form-group select {
-    width: 100%;
-    padding: 12px 15px;
-    border: 2px solid #e1e5e9;
-    border-radius: 8px;
-    font-size: 16px;
-    transition: border-color 0.3s ease;
-}
+.loading-spinner { font-size: 1rem; }
 
-.form-group input:focus, .form-group select:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+/* Tracking results */
+.tracking-info h4 { margin: .25rem 0 .25rem; }
+.tracking-label {
+  margin-top: .1rem;
+  font-size: .95rem;
+  color: #4b5563;
 }
+.tracking-details { margin-top: .5rem; }
 
-button {
-    width: 100%;
-    padding: 15px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-}
+.status-delivered { color: #059669; font-weight: 700; }
+.status-in-transit { color: #2563eb; font-weight: 700; }
+.status-pending { color: #b45309; font-weight: 700; }
+.status-error { color: #dc2626; font-weight: 700; }
 
-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.loading-spinner {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-.results {
-    display: none;
-}
-
-.tracking-info {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 15px;
-}
-
-.tracking-info h4 {
-    color: #667eea;
-    margin-bottom: 10px;
-    font-size: 1.2rem;
-}
-
-.tracking-info p {
-    margin-bottom: 8px;
-    line-height: 1.6;
-}
-
-.tracking-details {
-    margin-top: 15px;
-}
-
-.tracking-details h5 {
-    color: #555;
-    margin-bottom: 8px;
-}
-
-.tracking-details ul {
-    list-style: none;
-    padding-left: 0;
-}
-
-.tracking-details li {
-    padding: 8px 0;
-    border-bottom: 1px solid #e1e5e9;
-}
-
-.tracking-details li:last-child {
-    border-bottom: none;
-}
-
-.error-message {
-    background: #fee;
-    color: #c33;
-    padding: 15px;
-    border-radius: 8px;
-    border-left: 4px solid #c33;
-}
-
-.shipment-item {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 15px;
-    border-left: 4px solid #667eea;
-}
-
-.shipment-item h4 {
-    color: #333;
-    margin-bottom: 8px;
-}
-
-.shipment-item p {
-    color: #666;
-    font-size: 0.9rem;
-    margin-bottom: 5px;
-}
-
-.no-shipments {
-    text-align: center;
-    color: #999;
-    font-style: italic;
-}
-
-.timestamp {
-    font-size: 0.8rem;
-    color: #888;
-    margin-top: 10px;
-}
-
-/* Status colors */
-.status-delivered {
-    color: #28a745;
-    font-weight: 600;
-}
-
-.status-in-transit {
-    color: #007bff;
-    font-weight: 600;
-}
-
-.status-pending {
-    color: #ffc107;
-    font-weight: 600;
-}
-
-.status-error {
-    color: #dc3545;
-    font-weight: 600;
-}
-
-/* Progress Timeline Styles */
 .progress-timeline {
-    margin-top: 15px;
+  border-left: 3px solid #e5e7eb;
+  margin-left: .75rem;
+  padding-left: .75rem;
+}
+.progress-step { margin: .35rem 0; }
+.progress-step .when { color: #6b7280; font-size: .85rem; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: .5rem;
+  margin: .5rem 0 1rem;
+  flex-wrap: wrap;
+}
+.tab {
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  padding: .4rem .8rem;
+  border-radius: .6rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+.tab:hover { background: #eef2f7; }
+.tab.active {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
 }
 
-.progress-step {
-    display: flex;
-    align-items: flex-start;
-    margin-bottom: 15px;
-    padding: 10px;
-    border-radius: 8px;
-    background: #f8f9fa;
-    border-left: 4px solid #e1e5e9;
+/* History items */
+.shipment-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: .75rem;
+  margin-bottom: .6rem;
+  background: #fff;
 }
-
-.progress-step.completed {
-    background: #f0f8f0;
-    border-left-color: #28a745;
+.shipment-item h4 { margin: .2rem 0; }
+.shipment-item .label-line {
+  margin: .15rem 0 .35rem;
+  color: #4b5563;
+  font-size: .9rem;
 }
-
-.progress-step.pending {
-    background: #fff8f0;
-    border-left-color: #ffc107;
+.carrier-badge {
+  display: inline-block;
+  padding: .1rem .45rem;
+  border-radius: .4rem;
+  font-size: .75rem;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  margin-left: .35rem;
 }
+.timestamp { color: #6b7280; font-size: .85rem; }
+.no-shipments { color: #6b7280; }
 
-.step-indicator {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: #e1e5e9;
-    color: #666;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    margin-right: 15px;
-    flex-shrink: 0;
-}
 
-.progress-step.completed .step-indicator {
-    background: #28a745;
-    color: white;
-}
-
-.progress-step.pending .step-indicator {
-    background: #ffc107;
-    color: #333;
-}
-
-.step-content {
-    flex: 1;
-}
-
-.step-text {
-    font-weight: 600;
-    margin-bottom: 5px;
-    color: #333;
-}
-
-.step-status {
-    font-size: 0.85rem;
-    color: #666;
-}
-
-.progress-step.completed .step-status {
-    color: #28a745;
-    font-weight: 600;
-}
-
-.progress-step.pending .step-status {
-    color: #ffc107;
-    font-weight: 600;
-} 
+/* Status labels for progress items */
+.progress-step .status-line { margin-top: .15rem; font-size: .9rem; }
+.progress-step.completed .status-line { color: #059669; font-weight: 700; }
+.progress-step.pending .status-line { color: #b45309; font-weight: 700; }
