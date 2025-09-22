@@ -7,12 +7,30 @@ document.addEventListener('DOMContentLoaded', function () {
     const tabsContainer = document.getElementById('carrierTabs');
     let activeCarrierTab = 'all';
 
-    // Load saved shipments from localStorage (safe parse)
+    // Load saved shipments from localStorage (safe parse) and dedupe
     let savedShipments = [];
     try {
         const raw = localStorage.getItem('shipments');
         const parsed = raw ? JSON.parse(raw) : [];
-        savedShipments = Array.isArray(parsed) ? parsed : [];
+        const list = Array.isArray(parsed) ? parsed : [];
+        // Dedupe by trackingNumber + carrier, keep latest by timestamp
+        const keyToShipment = new Map();
+        for (const item of list) {
+            if (!item || !item.trackingNumber) continue;
+            const normalizedCarrier = (item.carrier || 'unknown').toLowerCase();
+            const normalizedTracking = String(item.trackingNumber).trim();
+            const key = normalizedTracking + '::' + normalizedCarrier;
+            const prev = keyToShipment.get(key);
+            if (!prev || (new Date(item.timestamp).getTime() > new Date(prev.timestamp).getTime())) {
+                keyToShipment.set(key, {
+                    ...item,
+                    trackingNumber: normalizedTracking,
+                    carrier: normalizedCarrier,
+                });
+            }
+        }
+        savedShipments = Array.from(keyToShipment.values());
+        localStorage.setItem('shipments', JSON.stringify(savedShipments));
     } catch (_) {
         savedShipments = [];
     }
@@ -24,6 +42,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const filterToEl = document.getElementById('filterTo');
     const applyFiltersBtn = document.getElementById('applyFiltersBtn');
     const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const refreshUndeliveredBtn = document.getElementById('refreshUndeliveredBtn');
 
     function getActiveFilter() {
         return {
@@ -44,6 +63,45 @@ document.addEventListener('DOMContentLoaded', function () {
             if (filterFromEl) filterFromEl.value = '';
             if (filterToEl) filterToEl.value = '';
             displayShipmentHistory();
+        });
+    }
+
+    async function refreshUndeliveredShipments() {
+        const undelivered = savedShipments.filter(s => !isDeliveredStatus(s.status));
+        if (undelivered.length === 0) return;
+
+        // Optional: basic UX lock to avoid double-clicks
+        const btn = refreshUndeliveredBtn;
+        if (btn) {
+            btn.disabled = true;
+            const old = btn.textContent;
+            btn.textContent = 'Refreshing...';
+            try {
+                for (const s of undelivered) {
+                    const data = await tryTrackEndpoints(s.trackingNumber, s.carrier || 'ups');
+                    if (data && !data.error) {
+                        // Merge and save
+                        saveShipment(s.trackingNumber, data, s.carrier, s.label || '');
+                    }
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Refresh Undelivered';
+            }
+        } else {
+            for (const s of undelivered) {
+                const data = await tryTrackEndpoints(s.trackingNumber, s.carrier || 'ups');
+                if (data && !data.error) {
+                    saveShipment(s.trackingNumber, data, s.carrier, s.label || '');
+                }
+            }
+        }
+        displayShipmentHistory();
+    }
+
+    if (refreshUndeliveredBtn) {
+        refreshUndeliveredBtn.addEventListener('click', () => {
+            refreshUndeliveredShipments();
         });
     }
 
@@ -206,17 +264,19 @@ const completed = step.completed === true || lower.startsWith('past event') || l
     }
 
     function saveShipment(trackingNumber, data, carrier, label) {
+        const normalizedTracking = String(trackingNumber || data.trackingNumber || '').trim();
+        const normalizedCarrier = (carrier || data.carrier || 'unknown').toLowerCase();
         const shipment = {
-            trackingNumber,
+            trackingNumber: normalizedTracking,
             status: data.status || data.currentStep || 'Unknown',
             timestamp: data.timestamp || Date.now(),
             details: data.details || data.progressSteps || [],
-            carrier: (carrier || data.carrier || 'unknown').toLowerCase(),
+            carrier: normalizedCarrier,
             label: label || data.label || ''
         };
 
         // Dedupe by trackingNumber + carrier
-        savedShipments = savedShipments.filter(s => !(s.trackingNumber === shipment.trackingNumber && (s.carrier || '') === shipment.carrier));
+        savedShipments = savedShipments.filter(s => !(String(s.trackingNumber).trim() === shipment.trackingNumber && (s.carrier || 'unknown') === shipment.carrier));
         savedShipments.unshift(shipment);
 
         // Keep last 20
