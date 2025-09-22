@@ -7,9 +7,45 @@ document.addEventListener('DOMContentLoaded', function () {
     const tabsContainer = document.getElementById('carrierTabs');
     let activeCarrierTab = 'all';
 
-    // Load saved shipments from localStorage
-    let savedShipments = JSON.parse(localStorage.getItem('shipments') || '[]');
-    displayShipmentHistory();
+    // Load saved shipments from localStorage (safe parse)
+    let savedShipments = [];
+    try {
+        const raw = localStorage.getItem('shipments');
+        const parsed = raw ? JSON.parse(raw) : [];
+        savedShipments = Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        savedShipments = [];
+    }
+
+    // ----- Filters -----
+    const filterStatusEl = document.getElementById('filterStatus');
+    const filterCarrierEl = document.getElementById('filterCarrier');
+    const filterFromEl = document.getElementById('filterFrom');
+    const filterToEl = document.getElementById('filterTo');
+    const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+
+    function getActiveFilter() {
+        return {
+            status: (filterStatusEl && filterStatusEl.value) ? filterStatusEl.value : 'all',
+            carrier: (filterCarrierEl && filterCarrierEl.value) ? filterCarrierEl.value : 'all',
+            from: (filterFromEl && filterFromEl.value) ? filterFromEl.value : '',
+            to: (filterToEl && filterToEl.value) ? filterToEl.value : ''
+        };
+    }
+
+    if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', () => displayShipmentHistory());
+    }
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            if (filterStatusEl) filterStatusEl.value = 'all';
+            if (filterCarrierEl) filterCarrierEl.value = 'all';
+            if (filterFromEl) filterFromEl.value = '';
+            if (filterToEl) filterToEl.value = '';
+            displayShipmentHistory();
+        });
+    }
 
     // Tab switching
     if (tabsContainer) {
@@ -23,7 +59,38 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    trackingForm.addEventListener('submit', async function (e) {
+    
+async function tryTrackEndpoints(trackingNumber, carrier) {
+    const payload = { trackingNumber, carrier };
+    const candidates = [
+        { url: '/api/track-ups', method: 'POST', body: JSON.stringify(payload) },
+        { url: '/track-ups', method: 'POST', body: JSON.stringify(payload) },
+        { url: '/api/track', method: 'POST', body: JSON.stringify(payload) },
+        { url: '/track', method: 'POST', body: JSON.stringify(payload) },
+        { url: `/api/track-ups?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
+        { url: `/track-ups?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
+        { url: `/api/track?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
+        { url: `/track?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
+    ];
+
+    for (const c of candidates) {
+        try {
+            const res = await fetch(c.url, {
+                method: c.method,
+                headers: c.method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+                body: c.method === 'POST' ? c.body : undefined,
+            });
+            if (!res.ok) continue;
+            const data = await res.json().catch(() => null);
+            if (data && !data.error) return data;
+        } catch (err) {
+            // try next
+        }
+    }
+    return { error: 'Unable to reach tracking endpoint. Please verify server routes.' };
+}
+
+trackingForm.addEventListener('submit', async function (e) {
         e.preventDefault();
 
         const trackingNumber = document.getElementById('trackingNumber').value.trim();
@@ -41,15 +108,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
             // for now we only call UPS endpoint (your server routes it)
-            const response = await fetch('/api/track-ups', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ trackingNumber, carrier })
-            });
+            const data = await tryTrackEndpoints(trackingNumber, carrier);
 
-            const data = await response.json();
-
-            if (data.error) {
+            if (data && data.error) {
                 showError(data.error);
             } else {
                 // augment data with label and carrier for immediate display
@@ -122,6 +183,11 @@ const completed = step.completed === true || lower.startsWith('past event') || l
         trackingInfoDiv.innerHTML = html;
     }
 
+    function isDeliveredStatus(status) {
+        const s = (status || '').toLowerCase();
+        return s.includes('delivered');
+    }
+
     function getStatusClass(status) {
         const s = (status || '').toLowerCase();
         if (s.includes('delivered')) return 'delivered';
@@ -161,9 +227,35 @@ const completed = step.completed === true || lower.startsWith('past event') || l
     }
 
     function displayShipmentHistory() {
-        const filtered = (activeCarrierTab && activeCarrierTab !== 'all')
+        const f = (typeof getActiveFilter === 'function') ? getActiveFilter() : { status: 'all', carrier: 'all', from: '', to: '' };
+        let filtered = (activeCarrierTab && activeCarrierTab !== 'all')
             ? savedShipments.filter(s => (s.carrier || 'unknown') === activeCarrierTab)
             : savedShipments.slice();
+
+        // Carrier filter
+        if (f.carrier && f.carrier !== 'all') {
+            filtered = filtered.filter(s => (s.carrier || 'unknown') === f.carrier);
+        }
+
+        // Status filter
+        if (f.status === 'delivered') {
+            filtered = filtered.filter(s => isDeliveredStatus(s.status));
+        } else if (f.status === 'not-delivered') {
+            filtered = filtered.filter(s => !isDeliveredStatus(s.status));
+        }
+
+        // Date range
+        const from = f.from ? new Date(f.from + 'T00:00:00').getTime() : null;
+        const to = f.to ? new Date(f.to + 'T23:59:59').getTime() : null;
+        if (from || to) {
+            filtered = filtered.filter(s => {
+                const t = new Date(s.timestamp).getTime();
+                if (Number.isNaN(t)) return false;
+                if (from && t < from) return false;
+                if (to && t > to) return false;
+                return true;
+            });
+        }
 
         if (filtered.length === 0) {
             shipmentListDiv.innerHTML = '<p class="no-shipments">No shipments to show for this tab. Track something above!</p>';
@@ -190,4 +282,6 @@ const completed = step.completed === true || lower.startsWith('past event') || l
         const date = new Date(timestamp);
         return date.toLocaleString();
     }
+    // Initial render after filters and handlers are ready
+    displayShipmentHistory();
 });

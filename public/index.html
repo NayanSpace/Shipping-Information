@@ -71,6 +71,41 @@
                     <button type="button" class="tab" data-carrier="usps">USPS</button>
                 </div>
 
+                <div class="filters" id="filters" style="margin: 12px 0; display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 8px; align-items: end;">
+                    <div>
+                        <label for="filterStatus">Status</label>
+                        <select id="filterStatus">
+                            <option value="all">All</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="not-delivered">Not Delivered</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterCarrier">Carrier</label>
+                        <select id="filterCarrier">
+                            <option value="all">All</option>
+                            <option value="ups">UPS</option>
+                            <option value="fedex">FedEx</option>
+                            <option value="polaris">Polaris</option>
+                            <option value="usps">USPS</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filterFrom">From</label>
+                        <input type="date" id="filterFrom">
+                    </div>
+                    <div>
+                        <label for="filterTo">To</label>
+                        <input type="date" id="filterTo">
+                    </div>
+                    <div>
+                        <button type="button" id="applyFiltersBtn">Apply</button>
+                    </div>
+                    <div>
+                        <button type="button" id="clearFiltersBtn">Clear</button>
+                    </div>
+                </div>
+
                 <div id="shipmentList">
                     <p class="no-shipments">No shipments tracked yet. Enter a tracking number above to get started!</p>
                 </div>
