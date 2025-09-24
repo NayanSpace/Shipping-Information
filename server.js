@@ -33,6 +33,23 @@ app.post('/api/track-ups', async (req, res) => {
     }
 });
 
+// API endpoint to track FedEx shipments
+app.post('/api/track-fedex', async (req, res) => {
+    const { trackingNumber } = req.body;
+
+    if (!trackingNumber) {
+        return res.status(400).json({ error: 'Tracking number is required' });
+    }
+
+    try {
+        const trackingInfo = await scrapeFedExTracking(trackingNumber);
+        res.json(trackingInfo);
+    } catch (error) {
+        console.error('FedEx tracking error:', error);
+        res.status(500).json({ error: 'Failed to track FedEx shipment' });
+    }
+});
+
 async function scrapeUPSTracking(trackingNumber) {
     const browser = await puppeteer.launch({ 
         headless: false, // Changed to false to match debug script
@@ -452,6 +469,200 @@ async function scrapeUPSTracking(trackingNumber) {
     } finally {
         // Add a small delay so you can see the browser window
         await page.waitForTimeout(2000);
+        await browser.close();
+    }
+}
+
+async function scrapeFedExTracking(trackingNumber) {
+    const browser = await puppeteer.launch({
+        headless: false,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor',
+            '--disable-http2',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-extensions',
+            '--disable-images',
+            '--disable-default-apps',
+            '--disable-sync',
+            '--disable-translate',
+            '--hide-scrollbars',
+            '--mute-audio',
+            '--no-first-run',
+            '--safebrowsing-disable-auto-update',
+            '--ignore-certificate-errors',
+            '--ignore-ssl-errors',
+            '--ignore-certificate-errors-spki-list',
+            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+    });
+
+    const page = await browser.newPage();
+
+    try {
+        await page.setViewport({ width: 1920, height: 1080 });
+        await page.evaluateOnNewDocument(() => {
+            delete navigator.__proto__.webdriver;
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        });
+
+        // Add realistic headers to lower WAF risk
+        await page.setExtraHTTPHeaders({
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Referer': 'https://www.fedex.com/'
+        });
+
+        const url = `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trackingNumber)}&cntry_code=us&locale=en_US`;
+        await page.waitForTimeout(Math.random() * 2000 + 1000);
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+
+        // If system error page is shown, fall back to homepage + form submit
+        if (page.url().includes('fedextrack/system-error')) {
+            try {
+                await page.waitForTimeout(1000 + Math.random() * 1000);
+                await page.goto('https://www.fedex.com/fedextrack/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await page.waitForTimeout(1500);
+                await page.evaluate((tn) => {
+                    const inputs = [
+                        'input[name="trackingnumber"]',
+                        'input[name*="track"]',
+                        '#trackingInput',
+                        'input[type="search"]',
+                        'form input'
+                    ];
+                    let input = null;
+                    for (const sel of inputs) {
+                        const el = document.querySelector(sel);
+                        if (el) { input = el; break; }
+                    }
+                    if (input) {
+                        input.focus();
+                        input.value = tn;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        const form = input.closest('form');
+                        if (form) {
+                            form.requestSubmit ? form.requestSubmit() : form.submit();
+                        } else {
+                            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                        }
+                    }
+                }, trackingNumber);
+                await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+            } catch (_) {}
+        }
+
+        // Ensure the main content container is visible before proceeding
+        try {
+            await page.waitForSelector('#content', { visible: true, timeout: 30000 });
+        } catch (_) {}
+
+        // Wait for progress container to show up
+        try {
+            await page.waitForFunction(() => {
+                const container = document.querySelector('.shipment-status-progress-container');
+                return container && container.querySelectorAll('.shipment-status-progress-step').length > 0;
+            }, { timeout: 15000 });
+        } catch (_) {}
+
+        await page.waitForTimeout(1500);
+
+        // Guarded evaluate to avoid "Requesting main frame too early"; retry a couple of times
+        async function extractWithRetry() {
+            let lastError = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    return await page.evaluate(() => {
+                        const stepsNodes = Array.from(document.querySelectorAll('.shipment-status-progress-container .shipment-status-progress-step'));
+                        const progressSteps = stepsNodes.map((el, idx) => {
+                            const text = el.innerText.trim() || `Step ${idx + 1}`;
+                            const classes = el.className || '';
+                            const isComplete = classes.includes('complete');
+                            const isActive = classes.includes('active');
+                            return {
+                                stepNumber: idx + 1,
+                                text,
+                                completed: isComplete,
+                                active: isActive,
+                                timestamp: new Date().toISOString()
+                            };
+                        });
+
+                        // Determine status
+                        const activeStep = progressSteps.find(s => s.active);
+                        const lastCompleted = [...progressSteps].reverse().find(s => s.completed);
+                        let currentStatus = activeStep?.text || lastCompleted?.text || (progressSteps[0]?.text || 'Unknown');
+
+                        // Delivered detection
+                        const delivered = progressSteps.some(s => /delivered/i.test(s.text)) || document.body.innerText.toLowerCase().includes('delivered');
+                        const allCompleted = progressSteps.length > 0 && progressSteps.every(s => s.completed === true);
+                        if ((delivered || allCompleted) && !/delivered/i.test(currentStatus)) {
+                            currentStatus = 'Delivered';
+                        }
+
+                        // Status label on page if present
+                        const statusEl = document.querySelector('[data-automation*="status"], .status, .scan-status, [class*="status"]');
+                        let pageStatus = statusEl && statusEl.textContent && statusEl.textContent.trim().length > 0 ? statusEl.textContent.trim() : currentStatus;
+                        if (allCompleted && !/delivered/i.test(pageStatus)) {
+                            pageStatus = 'Delivered';
+                        }
+
+                        return {
+                            status: pageStatus,
+                            currentStep: currentStatus,
+                            progressSteps,
+                            trackingNumber: (new URLSearchParams(location.search).get('trknbr') || ''),
+                            timestamp: new Date().toISOString(),
+                            carrier: 'fedex',
+                            isDelivered: /delivered/i.test(pageStatus) || delivered || allCompleted
+                        };
+                    });
+                } catch (err) {
+                    lastError = err;
+                    const msg = String(err && err.message || '');
+                    if (msg.includes('Requesting main frame too early')) {
+                        await page.waitForTimeout(1000);
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+            throw lastError;
+        }
+
+        const trackingData = await extractWithRetry();
+
+        // Ensure tracking number set
+        if (!trackingData.trackingNumber) {
+            trackingData.trackingNumber = String(trackingNumber);
+        }
+
+        return trackingData;
+    } catch (error) {
+        console.error('FedEx scraping error:', error);
+        return {
+            error: 'Could not retrieve FedEx tracking information',
+            trackingNumber,
+            timestamp: new Date().toISOString()
+        };
+    } finally {
+        await page.waitForTimeout(1000);
         await browser.close();
     }
 }
