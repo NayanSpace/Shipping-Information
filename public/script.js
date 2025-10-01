@@ -70,33 +70,51 @@ document.addEventListener('DOMContentLoaded', function () {
         const undelivered = savedShipments.filter(s => !isDeliveredStatus(s.status));
         if (undelivered.length === 0) return;
 
-        // Optional: basic UX lock to avoid double-clicks
+        // Basic UX lock
         const btn = refreshUndeliveredBtn;
+        let oldText = '';
         if (btn) {
             btn.disabled = true;
-            const old = btn.textContent;
+            oldText = btn.textContent;
             btn.textContent = 'Refreshing...';
-            try {
-                for (const s of undelivered) {
-                    const data = await tryTrackEndpoints(s.trackingNumber, s.carrier || 'ups');
-                    if (data && !data.error) {
-                        // Merge and save
-                        saveShipment(s.trackingNumber, data, s.carrier, s.label || '');
-                    }
-                }
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Refresh Undelivered';
-            }
-        } else {
-            for (const s of undelivered) {
-                const data = await tryTrackEndpoints(s.trackingNumber, s.carrier || 'ups');
-                if (data && !data.error) {
-                    saveShipment(s.trackingNumber, data, s.carrier, s.label || '');
-                }
-            }
         }
-        displayShipmentHistory();
+
+        try {
+            const requests = undelivered.map(s => tryTrackEndpoints(s.trackingNumber, s.carrier || 'ups'));
+            const settled = await Promise.allSettled(requests);
+
+            // Batch merge updates and save once
+            for (let i = 0; i < settled.length; i++) {
+                const outcome = settled[i];
+                if (outcome.status !== 'fulfilled') continue;
+                const data = outcome.value;
+                if (!data || data.error) continue;
+
+                const s = undelivered[i];
+                const normalizedTracking = String(s.trackingNumber || data.trackingNumber || '').trim();
+                const normalizedCarrier = (s.carrier || data.carrier || 'unknown').toLowerCase();
+
+                const updated = {
+                    trackingNumber: normalizedTracking,
+                    status: data.status || data.currentStep || 'Unknown',
+                    timestamp: data.timestamp || Date.now(),
+                    details: data.details || data.progressSteps || [],
+                    carrier: normalizedCarrier,
+                    label: s.label || data.label || ''
+                };
+
+                savedShipments = savedShipments.filter(x => !(String(x.trackingNumber).trim() === normalizedTracking && (x.carrier || 'unknown') === normalizedCarrier));
+                savedShipments.unshift(updated);
+            }
+
+            localStorage.setItem('shipments', JSON.stringify(savedShipments));
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = oldText || 'Refresh Undelivered';
+            }
+            displayShipmentHistory();
+        }
     }
 
     if (refreshUndeliveredBtn) {
@@ -120,23 +138,27 @@ document.addEventListener('DOMContentLoaded', function () {
     
 async function tryTrackEndpoints(trackingNumber, carrier) {
     const payload = { trackingNumber, carrier };
-    const candidates = [
+    const c = (carrier || '').toLowerCase();
+    const upsCandidates = [
         { url: '/api/track-ups', method: 'POST', body: JSON.stringify(payload) },
         { url: '/track-ups', method: 'POST', body: JSON.stringify(payload) },
-        { url: '/api/track', method: 'POST', body: JSON.stringify(payload) },
-        { url: '/track', method: 'POST', body: JSON.stringify(payload) },
         { url: `/api/track-ups?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
         { url: `/track-ups?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
-        { url: `/api/track?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
-        { url: `/track?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
     ];
+    const fedexCandidates = [
+        { url: '/api/track-fedex', method: 'POST', body: JSON.stringify(payload) },
+        { url: '/track-fedex', method: 'POST', body: JSON.stringify(payload) },
+        { url: `/api/track-fedex?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
+        { url: `/track-fedex?trackingNumber=${encodeURIComponent(trackingNumber)}`, method: 'GET' },
+    ];
+    const candidates = c === 'fedex' ? fedexCandidates : upsCandidates;
 
-    for (const c of candidates) {
+    for (const cnd of candidates) {
         try {
-            const res = await fetch(c.url, {
-                method: c.method,
-                headers: c.method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
-                body: c.method === 'POST' ? c.body : undefined,
+            const res = await fetch(cnd.url, {
+                method: cnd.method,
+                headers: cnd.method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+                body: cnd.method === 'POST' ? cnd.body : undefined,
             });
             if (!res.ok) continue;
             const data = await res.json().catch(() => null);
@@ -241,9 +263,19 @@ const completed = step.completed === true || lower.startsWith('past event') || l
         trackingInfoDiv.innerHTML = html;
     }
 
-    function isDeliveredStatus(status) {
+    function isDeliveredStatus(status, details) {
         const s = (status || '').toLowerCase();
-        return s.includes('delivered');
+        if (s.includes('delivered')) return true;
+        if (Array.isArray(details) && details.length && details.every(d => d && d.completed === true)) return true;
+        return false;
+    }
+
+    function normalizeStatus(status, details) {
+        if (isDeliveredStatus(status, details)) return 'Delivered';
+        // Clean obvious FedEx placeholder strings
+        const txt = String(status || '').trim();
+        if (/shipmentitem\.keystatus/i.test(txt)) return 'Delivered';
+        return txt || 'Unknown';
     }
 
     function getStatusClass(status) {
@@ -266,11 +298,13 @@ const completed = step.completed === true || lower.startsWith('past event') || l
     function saveShipment(trackingNumber, data, carrier, label) {
         const normalizedTracking = String(trackingNumber || data.trackingNumber || '').trim();
         const normalizedCarrier = (carrier || data.carrier || 'unknown').toLowerCase();
+        const details = data.details || data.progressSteps || [];
+        const status = normalizeStatus(data.status || data.currentStep || 'Unknown', details);
         const shipment = {
             trackingNumber: normalizedTracking,
-            status: data.status || data.currentStep || 'Unknown',
+            status,
             timestamp: data.timestamp || Date.now(),
-            details: data.details || data.progressSteps || [],
+            details,
             carrier: normalizedCarrier,
             label: label || data.label || ''
         };
@@ -299,9 +333,9 @@ const completed = step.completed === true || lower.startsWith('past event') || l
 
         // Status filter
         if (f.status === 'delivered') {
-            filtered = filtered.filter(s => isDeliveredStatus(s.status));
+            filtered = filtered.filter(s => isDeliveredStatus(s.status, s.details));
         } else if (f.status === 'not-delivered') {
-            filtered = filtered.filter(s => !isDeliveredStatus(s.status));
+            filtered = filtered.filter(s => !isDeliveredStatus(s.status, s.details));
         }
 
         // Date range
@@ -322,17 +356,20 @@ const completed = step.completed === true || lower.startsWith('past event') || l
             return;
         }
 
-        const html = filtered.map(shipment => `
+        const html = filtered.map(shipment => {
+            const displayStatus = normalizeStatus(shipment.status, shipment.details);
+            return `
             <div class="shipment-item">
                 <h4>
                     ${shipment.trackingNumber}
                     ${shipment.carrier ? `<span class="carrier-badge">${shipment.carrier.toUpperCase()}</span>` : ''}
                 </h4>
                 ${shipment.label ? `<div class="label-line">${shipment.label}</div>` : ''}
-                <p><strong>Status:</strong> <span class="status-${getStatusClass(shipment.status)}">${shipment.status}</span></p>
+                <p><strong>Status:</strong> <span class="status-${getStatusClass(displayStatus)}">${displayStatus}</span></p>
                 <p class="timestamp">Tracked: ${formatTimestamp(shipment.timestamp)}</p>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         shipmentListDiv.innerHTML = html;
     }
