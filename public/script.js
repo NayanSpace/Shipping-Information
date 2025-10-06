@@ -246,6 +246,42 @@ const completed = step.completed === true || lower.startsWith('past event') || l
         return s.includes('delivered');
     }
 
+    function getDaysUntilRemoval(shipment) {
+        if (!isDeliveredStatus(shipment.status)) return null;
+        
+        const deliveredTime = new Date(shipment.timestamp);
+        const now = new Date();
+        const daysSinceDelivered = Math.floor((now - deliveredTime) / (1000 * 60 * 60 * 24));
+        const daysUntilRemoval = 5 - daysSinceDelivered;
+        
+        return Math.max(0, daysUntilRemoval);
+    }
+
+    function shouldAutoRemove(shipment) {
+        if (!isDeliveredStatus(shipment.status)) return false;
+        
+        const deliveredTime = new Date(shipment.timestamp);
+        const now = new Date();
+        const daysSinceDelivered = Math.floor((now - deliveredTime) / (1000 * 60 * 60 * 24));
+        
+        return daysSinceDelivered >= 5;
+    }
+
+    function removeShipmentFromHistory(trackingNumber, carrier) {
+        const normalizedTracking = String(trackingNumber).trim();
+        const normalizedCarrier = (carrier || 'unknown').toLowerCase();
+        
+        savedShipments = savedShipments.filter(s => 
+            !(String(s.trackingNumber).trim() === normalizedTracking && (s.carrier || 'unknown') === normalizedCarrier)
+        );
+        
+        localStorage.setItem('shipments', JSON.stringify(savedShipments));
+        displayShipmentHistory();
+    }
+
+    // Make the function globally accessible for onclick handlers
+    window.removeShipmentFromHistory = removeShipmentFromHistory;
+
     function getStatusClass(status) {
         const s = (status || '').toLowerCase();
         if (s.includes('delivered')) return 'delivered';
@@ -287,6 +323,16 @@ const completed = step.completed === true || lower.startsWith('past event') || l
     }
 
     function displayShipmentHistory() {
+        // First, remove any delivered packages that are older than 5 days
+        const beforeFilter = savedShipments.length;
+        savedShipments = savedShipments.filter(shipment => !shouldAutoRemove(shipment));
+        const afterFilter = savedShipments.length;
+        
+        if (beforeFilter !== afterFilter) {
+            localStorage.setItem('shipments', JSON.stringify(savedShipments));
+            console.log(`Auto-removed ${beforeFilter - afterFilter} delivered packages older than 5 days`);
+        }
+
         const f = (typeof getActiveFilter === 'function') ? getActiveFilter() : { status: 'all', carrier: 'all', from: '', to: '' };
         let filtered = (activeCarrierTab && activeCarrierTab !== 'all')
             ? savedShipments.filter(s => (s.carrier || 'unknown') === activeCarrierTab)
@@ -322,17 +368,31 @@ const completed = step.completed === true || lower.startsWith('past event') || l
             return;
         }
 
-        const html = filtered.map(shipment => `
-            <div class="shipment-item">
-                <h4>
-                    ${shipment.trackingNumber}
-                    ${shipment.carrier ? `<span class="carrier-badge">${shipment.carrier.toUpperCase()}</span>` : ''}
-                </h4>
-                ${shipment.label ? `<div class="label-line">${shipment.label}</div>` : ''}
-                <p><strong>Status:</strong> <span class="status-${getStatusClass(shipment.status)}">${shipment.status}</span></p>
-                <p class="timestamp">Tracked: ${formatTimestamp(shipment.timestamp)}</p>
-            </div>
-        `).join('');
+        const html = filtered.map(shipment => {
+            const daysUntilRemoval = getDaysUntilRemoval(shipment);
+            const removalInfo = daysUntilRemoval !== null ? 
+                `<div class="removal-info">
+                    <span class="removal-countdown">${daysUntilRemoval} day${daysUntilRemoval === 1 ? '' : 's'} left before removal</span>
+                </div>` : '';
+            
+            return `
+                <div class="shipment-item">
+                    <div class="shipment-header">
+                        <h4>
+                            ${shipment.trackingNumber}
+                            ${shipment.carrier ? `<span class="carrier-badge">${shipment.carrier.toUpperCase()}</span>` : ''}
+                        </h4>
+                        <button class="remove-btn" onclick="removeShipmentFromHistory('${shipment.trackingNumber}', '${shipment.carrier || 'unknown'}')" title="Remove from history">
+                            🗑️
+                        </button>
+                    </div>
+                    ${shipment.label ? `<div class="label-line">${shipment.label}</div>` : ''}
+                    <p><strong>Status:</strong> <span class="status-${getStatusClass(shipment.status)}">${shipment.status}</span></p>
+                    <p class="timestamp">Tracked: ${formatTimestamp(shipment.timestamp)}</p>
+                    ${removalInfo}
+                </div>
+            `;
+        }).join('');
 
         shipmentListDiv.innerHTML = html;
     }

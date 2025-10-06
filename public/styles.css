@@ -120,8 +120,35 @@ input[type="text"]:focus, select:focus {
   padding: .75rem;
   margin-bottom: .6rem;
   background: #fff;
+  position: relative;
 }
-.shipment-item h4 { margin: .2rem 0; }
+.shipment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: .2rem;
+}
+.shipment-item h4 { 
+  margin: .2rem 0; 
+  flex: 1;
+}
+.remove-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: .2rem;
+  border-radius: .3rem;
+  transition: background-color 0.2s ease;
+  margin-left: .5rem;
+}
+.remove-btn:hover {
+  background-color: #fef2f2;
+  transform: scale(1.1);
+}
+.remove-btn:active {
+  transform: scale(0.95);
+}
 .shipment-item .label-line {
   margin: .15rem 0 .35rem;
   color: #4b5563;
@@ -137,6 +164,18 @@ input[type="text"]:focus, select:focus {
   margin-left: .35rem;
 }
 .timestamp { color: #6b7280; font-size: .85rem; }
+.removal-info {
+  margin-top: .5rem;
+  padding: .4rem .6rem;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: .5rem;
+  font-size: .85rem;
+}
+.removal-countdown {
+  color: #92400e;
+  font-weight: 600;
+}
 .no-shipments { color: #6b7280; }
 
 
