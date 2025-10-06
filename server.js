@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
@@ -34,8 +34,11 @@ app.post('/api/track-ups', async (req, res) => {
 });
 
 async function scrapeUPSTracking(trackingNumber) {
+    // Production configuration for Render
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     const browser = await puppeteer.launch({ 
-        headless: false, // Changed to false to match debug script
+        headless: isProduction ? 'new' : false, // Use new headless mode in production
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
@@ -62,6 +65,27 @@ async function scrapeUPSTracking(trackingNumber) {
             '--ignore-certificate-errors',
             '--ignore-ssl-errors',
             '--ignore-certificate-errors-spki-list',
+            // Production-specific args for Render
+            ...(isProduction ? [
+                '--single-process',
+                '--no-zygote',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-field-trial-config',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-sync',
+                '--force-color-profile=srgb',
+                '--metrics-recording-only',
+                '--no-first-run',
+                '--enable-automation',
+                '--password-store=basic',
+                '--use-mock-keychain'
+            ] : []),
             '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
     });

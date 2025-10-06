@@ -4,17 +4,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Logs
-logs
-*.log
-
 # Runtime data
 pids
 *.pid
@@ -27,7 +16,20 @@ coverage/
 # nyc test coverage
 .nyc_output
 
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
 # Dependency directories
+node_modules/
 jspm_packages/
 
 # Optional npm cache directory
@@ -44,12 +46,30 @@ jspm_packages/
 
 # dotenv environment variables file
 .env
+.env.test
+.env.production
 
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
 
 # OS generated files
 .DS_Store
@@ -60,13 +80,13 @@ jspm_packages/
 ehthumbs.db
 Thumbs.db
 
-# Screenshots and debug files
-*.png
-debug-*.png
-ups-tracking-page.png
-debug-ups-page.png
-debug-ups-page-timeout.png
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Temporary files
-*.tmp
-*.temp 
+# Logs
+logs
+*.log
