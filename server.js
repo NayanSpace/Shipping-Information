@@ -145,10 +145,9 @@ async function scrapeUPSTracking(trackingNumber) {
             await dialog.accept();
         });
         
-        // Go to UPS tracking page (using same approach as debug script)
+        // Go to UPS tracking page
         console.log('🌐 Navigating to UPS tracking page...');
         const url = `https://www.ups.com/track?loc=en_US&tracknum=${trackingNumber}`;
-        console.log('URL:', url);
         
         // Add a random delay to simulate human behavior
         await page.waitForTimeout(Math.random() * 2000 + 1000);
@@ -161,7 +160,6 @@ async function scrapeUPSTracking(trackingNumber) {
         console.log('Page loaded, waiting for content to appear...');
         
         // Wait for the main content to load and be visible
-        console.log('Waiting for main content to load...');
         let mainContentLoaded = false;
         let attempts = 0;
         const maxAttempts = 30; // 30 seconds total
@@ -190,7 +188,7 @@ async function scrapeUPSTracking(trackingNumber) {
                 
             } catch (error) {
                 attempts++;
-                console.log(`Attempt ${attempts}/${maxAttempts}: Main content not ready yet, waiting...`);
+                console.log(`Attempt ${attempts}/${maxAttempts}: Main content not ready yet...`);
                 await page.waitForTimeout(1000);
             }
         }

@@ -90,3 +90,16 @@ Thumbs.db
 # Logs
 logs
 *.log
+
+# Test files and debugging
+test-*.js
+debug-*.js
+*-test.js
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Documentation that's not needed in production
+ANTI-DETECTION-FIXES.md
+debug-*.md
