@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: shipping-tracker
+    name: Tracking-Information
     env: node
     plan: free
     buildCommand: npm install
@@ -10,3 +10,5 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: true

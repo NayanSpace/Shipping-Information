@@ -1,7 +1,10 @@
+const os = require('os');
 const express = require('express');
 const puppeteer = require('puppeteer');
 const cors = require('cors');
 const path = require('path');
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,11 +36,17 @@ app.post('/api/track-ups', async (req, res) => {
     }
 });
 
+const linuxDefault = '/usr/bin/chromium';
+const shouldForcePath = process.platform === 'linux';
+const executablePath =
+  process.env.CHROME_PATH || (shouldForcePath ? linuxDefault : undefined);
+
 async function scrapeUPSTracking(trackingNumber) {
     // Production configuration for Render
     const isProduction = process.env.NODE_ENV === 'production';
     
-    const browser = await puppeteer.launch({ 
+    const browser = await puppeteer.launch({
+        executablePath,
         headless: isProduction ? 'new' : false, // Use new headless mode in production
         args: [
             '--no-sandbox', 
