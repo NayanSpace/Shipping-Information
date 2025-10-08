@@ -44,7 +44,16 @@ const executablePath =
 async function scrapeUPSTracking(trackingNumber) {
     // Production configuration for Render
     const isProduction = process.env.NODE_ENV === 'production';
+    const fs = require('fs');
+    console.log('CHROME_PATH env:', process.env.CHROME_PATH);
     
+    const linuxDefault = '/usr/bin/chromium';
+    const shouldForcePath = process.platform === 'linux';
+    const executablePath =
+      process.env.CHROME_PATH || (shouldForcePath ? linuxDefault : undefined);
+    
+    console.log('Puppeteer executablePath resolved to:', executablePath, 'exists?', executablePath && fs.existsSync(executablePath));
+     
     const browser = await puppeteer.launch({
         executablePath,
         headless: isProduction ? 'new' : false, // Use new headless mode in production
@@ -63,7 +72,6 @@ async function scrapeUPSTracking(trackingNumber) {
             '--disable-extensions',
             '--disable-plugins',
             '--disable-images',
-            '--disable-javascript',
             '--disable-default-apps',
             '--disable-sync',
             '--disable-translate',
