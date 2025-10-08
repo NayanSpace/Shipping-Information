@@ -1,1 +1,9 @@
 chromium
+fonts-liberation
+libnss3
+libxss1
+libasound2
+libatk-bridge2.0-0
+libgtk-3-0
+libxshmfence1
+libgbm1
