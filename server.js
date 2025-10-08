@@ -36,26 +36,12 @@ app.post('/api/track-ups', async (req, res) => {
     }
 });
 
-const linuxDefault = '/usr/bin/chromium';
-const shouldForcePath = process.platform === 'linux';
-const executablePath =
-  process.env.CHROME_PATH || (shouldForcePath ? linuxDefault : undefined);
-
 async function scrapeUPSTracking(trackingNumber) {
     // Production configuration for Render
+    console.log('Launching Puppeteer with bundled Chromium...')
     const isProduction = process.env.NODE_ENV === 'production';
-    const fs = require('fs');
-    console.log('CHROME_PATH env:', process.env.CHROME_PATH);
-    
-    const linuxDefault = '/usr/bin/chromium';
-    const shouldForcePath = process.platform === 'linux';
-    const executablePath =
-      process.env.CHROME_PATH || (shouldForcePath ? linuxDefault : undefined);
-    
-    console.log('Puppeteer executablePath resolved to:', executablePath, 'exists?', executablePath && fs.existsSync(executablePath));
      
     const browser = await puppeteer.launch({
-        executablePath,
         headless: isProduction ? 'new' : false, // Use new headless mode in production
         args: [
             '--no-sandbox', 
